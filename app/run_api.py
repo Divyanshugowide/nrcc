@@ -1,8 +1,15 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.responses import HTMLResponse, Response
+from fastapi.security import HTTPBearer
 from pydantic import BaseModel
 import os, json
 from .retrieval import load_bm25, load_faiss, load_meta, load_model, Indices, search
+from .auth import (
+    User, UserCreate, UserLogin, Token, authenticate_user, create_access_token,
+    get_current_user, require_roles, check_file_access, filter_documents_by_access,
+    get_effective_roles, ACCESS_TOKEN_EXPIRE_MINUTES
+)
+from datetime import timedelta
 
 # ---- Paths ----
 BM25_PATH = "data/idx/bm25.pkl"
@@ -16,10 +23,12 @@ indices: Indices | None = None
 
 
 class AskPayload(BaseModel):
-    user_id: str
-    roles: list[str] = ["staff"]
     query: str
     topk: int = 5
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 
 @app.on_event("startup")
@@ -31,7 +40,7 @@ def load_all():
     meta = load_meta(META_PATH)
     model = load_model(MODEL_NAME)
     indices = Indices(bm25=bm25, faiss_index=faiss_index, meta=meta, model=model)
-    print("[OK] System ready ✅")
+    print("[OK] System ready")
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -51,6 +60,7 @@ def home():
   --secondary-color: #64748b;
   --success-color: #059669;
   --warning-color: #d97706;
+  --error-color: #dc2626;
   --background: #f8fafc;
   --card-bg: #ffffff;
   --text-primary: #1e293b;
@@ -82,6 +92,7 @@ body {
   padding: 2rem 0;
   text-align: center;
   box-shadow: var(--shadow-lg);
+  position: relative;
 }
 
 .header h1 {
@@ -97,6 +108,33 @@ body {
   font-weight: 300;
 }
 
+.user-info {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 0.5rem 1rem;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  backdrop-filter: blur(10px);
+}
+
+.logout-btn {
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  padding: 0.25rem 0.75rem;
+  border-radius: 15px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  margin-right: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
 .container {
   max-width: 1200px;
   margin: -2rem auto 2rem;
@@ -106,6 +144,64 @@ body {
   box-shadow: var(--shadow-lg);
   position: relative;
   z-index: 1;
+}
+
+.login-container {
+  max-width: 400px;
+  margin: 2rem auto;
+  background: var(--card-bg);
+  border-radius: 16px;
+  padding: 2rem;
+  box-shadow: var(--shadow-lg);
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.form-group input {
+  padding: 0.75rem 1rem;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 1rem;
+  font-family: inherit;
+  transition: all 0.3s ease;
+}
+
+.form-group input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+}
+
+.login-btn {
+  padding: 0.75rem 1.5rem;
+  background: linear-gradient(135deg, var(--primary-color), var(--primary-hover));
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.login-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(30, 64, 175, 0.3);
 }
 
 .search-box {
@@ -309,6 +405,16 @@ mark[style*="lightgreen"] {
   background: linear-gradient(135deg, #bbf7d0, #86efac);
 }
 
+.access-info {
+  background: linear-gradient(135deg, #fef3c7, #fde68a);
+  border: 1px solid #f59e0b;
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: #92400e;
+}
+
 @media (max-width: 768px) {
   .container {
     margin: -1rem 1rem 1rem;
@@ -321,6 +427,11 @@ mark[style*="lightgreen"] {
   
   .header h1 {
     font-size: 2rem;
+  }
+  
+  .user-info {
+    position: static;
+    margin-bottom: 1rem;
   }
   
   .citation-header {
@@ -382,18 +493,52 @@ mark[style*="lightgreen"] {
 .example-tag:active {
   transform: translateY(0);
 }
+
+.hidden {
+  display: none !important;
+}
 </style>
 </head>
 <body>
 <div class="header">
   <h1>🔍 الباحث القانوني النووي</h1>
   <p>محرك بحث ذكي للأنظمة والقوانين النووية مع تمييز النتائج بالألوان</p>
+  <div id="userInfo" class="user-info hidden">
+    <span id="userName"></span>
+    <span id="userRoles"></span>
+    <button class="logout-btn" onclick="logout()">تسجيل الخروج</button>
+  </div>
 </div>
 
-<div class="container">
+<div id="loginContainer" class="login-container">
+  <h2 style="text-align: center; margin-bottom: 1.5rem; color: var(--primary-color);">تسجيل الدخول</h2>
+  <form class="login-form" onsubmit="login(event)">
+    <div class="form-group">
+      <label for="username">اسم المستخدم:</label>
+      <input type="text" id="username" required>
+    </div>
+    <div class="form-group">
+      <label for="password">كلمة المرور:</label>
+      <input type="password" id="password" required>
+    </div>
+    <button type="submit" class="login-btn">تسجيل الدخول</button>
+  </form>
+  <div style="margin-top: 1rem; padding: 1rem; background: #f8fafc; border-radius: 8px; font-size: 0.9rem;">
+    <strong>حسابات تجريبية:</strong><br>
+    • admin / admin123 (مدير النظام)<br>
+    • legal / legal123 (مستشار قانوني)<br>
+    • staff / staff123 (موظف عام)
+  </div>
+</div>
+
+<div id="mainContainer" class="container hidden">
   <div class="search-box">
     <input id="query" type="text" placeholder="ابحث في الوثائق... مثال: ما هي الاتفاقيات النووية؟" autocomplete="off">
     <button id="searchBtn" onclick="askQuestion()">🔍 بحث</button>
+  </div>
+  
+  <div id="accessInfo" class="access-info hidden">
+    <strong>معلومات الصلاحيات:</strong> <span id="accessDetails"></span>
   </div>
   
   <div class="highlight-legend">
@@ -433,7 +578,92 @@ mark[style*="lightgreen"] {
 </div>
 
 <script>
-// Search functionality with improved UI
+// Global variables
+let currentUser = null;
+let authToken = null;
+
+// Authentication functions
+async function login(event) {
+  event.preventDefault();
+  
+  const username = document.getElementById('username').value;
+  const password = document.getElementById('password').value;
+  
+  try {
+    const response = await fetch('/login', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ username, password }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.detail || 'فشل تسجيل الدخول');
+    }
+    
+    const data = await response.json();
+    authToken = data.access_token;
+    
+    // Get user info
+    const userResponse = await fetch('/me', {
+      headers: {
+        'Authorization': `Bearer ${authToken}`,
+      },
+    });
+    
+    if (userResponse.ok) {
+      currentUser = await userResponse.json();
+      showMainInterface();
+    } else {
+      throw new Error('فشل في الحصول على معلومات المستخدم');
+    }
+    
+  } catch (error) {
+    showNotification(error.message, 'error');
+  }
+}
+
+function logout() {
+  currentUser = null;
+  authToken = null;
+  showLoginInterface();
+  showNotification('تم تسجيل الخروج بنجاح', 'success');
+}
+
+function showLoginInterface() {
+  document.getElementById('loginContainer').classList.remove('hidden');
+  document.getElementById('mainContainer').classList.add('hidden');
+  document.getElementById('userInfo').classList.add('hidden');
+}
+
+function showMainInterface() {
+  document.getElementById('loginContainer').classList.add('hidden');
+  document.getElementById('mainContainer').classList.remove('hidden');
+  document.getElementById('userInfo').classList.remove('hidden');
+  
+  // Update user info display
+  document.getElementById('userName').textContent = `مرحباً ${currentUser.full_name}`;
+  document.getElementById('userRoles').textContent = `(${currentUser.roles.join(', ')})`;
+  
+  // Update access info
+  const accessInfo = document.getElementById('accessInfo');
+  const accessDetails = document.getElementById('accessDetails');
+  
+  if (currentUser.roles.includes('admin')) {
+    accessDetails.textContent = 'لديك صلاحية الوصول لجميع الوثائق بما في ذلك الوثائق المقيدة';
+    accessInfo.classList.remove('hidden');
+  } else if (currentUser.roles.includes('legal')) {
+    accessDetails.textContent = 'لديك صلاحية الوصول للوثائق العامة والوثائق المقيدة';
+    accessInfo.classList.remove('hidden');
+  } else {
+    accessDetails.textContent = 'لديك صلاحية الوصول للوثائق العامة فقط';
+    accessInfo.classList.remove('hidden');
+  }
+}
+
+// Search functionality with authentication
 async function askQuestion() {
   const query = document.getElementById("query").value.trim();
   const ans = document.getElementById("answer");
@@ -448,6 +678,11 @@ async function askQuestion() {
     return; 
   }
 
+  if (!authToken) {
+    showNotification("يرجى تسجيل الدخول أولاً", "error");
+    return;
+  }
+
   // Reset UI state
   ans.innerHTML = "";
   cites.innerHTML = "";
@@ -459,16 +694,24 @@ async function askQuestion() {
   searchBtn.disabled = true;
   searchBtn.innerHTML = "⏳ جاري البحث...";
 
-  const payload = { user_id: "demo", roles: ["staff"], query: query, topk: 8 };
+  const payload = { query: query, topk: 8 };
 
   try {
     const res = await fetch("/ask", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { 
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${authToken}`
+      },
       body: JSON.stringify(payload)
     });
 
     if (!res.ok) {
+      if (res.status === 401) {
+        showNotification("انتهت صلاحية الجلسة، يرجى تسجيل الدخول مرة أخرى", "error");
+        logout();
+        return;
+      }
       throw new Error(`خطأ في الخادم: ${res.status}`);
     }
 
@@ -553,7 +796,11 @@ async function askQuestion() {
         }, index * 100);
       });
       
-      showNotification(`تم العثور على ${data.citations.length} نتيجة مطابقة`, "success");
+      let notificationText = `تم العثور على ${data.citations.length} نتيجة مطابقة`;
+      if (data.total_found && data.total_found > data.accessible_results) {
+        notificationText += ` (${data.total_found - data.accessible_results} نتيجة مقيدة)`;
+      }
+      showNotification(notificationText, "success");
     }
     
   } catch (err) {
@@ -619,16 +866,16 @@ function showNotification(message, type = 'info') {
 }
 
 // Enhanced keyboard support
+document.addEventListener('DOMContentLoaded', function() {
+  // Auto-focus on username input
+  document.getElementById("username").focus();
+});
+
 document.getElementById("query").addEventListener("keypress", function(e) {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
     askQuestion();
   }
-});
-
-// Auto-focus on search input
-document.addEventListener('DOMContentLoaded', function() {
-  document.getElementById("query").focus();
 });
 
 // Clear search results when input changes significantly
@@ -667,12 +914,70 @@ function setQuery(exampleQuery) {
 """)
 
 
+# Authentication endpoints
+@app.post("/login", response_model=Token)
+async def login(login_data: LoginRequest):
+    """Login endpoint to get access token"""
+    user = authenticate_user(login_data.username, login_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user["username"]}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/me", response_model=User)
+async def read_users_me(current_user: User = Depends(get_current_user)):
+    """Get current user information"""
+    return current_user
+
+@app.get("/users", response_model=list[User])
+async def list_users(current_user: User = Depends(require_roles(["admin"]))):
+    """List all users (admin only)"""
+    from .auth import USERS_DB
+    users = []
+    for user_data in USERS_DB.values():
+        users.append(User(
+            username=user_data["username"],
+            email=user_data["email"],
+            full_name=user_data["full_name"],
+            roles=user_data["roles"],
+            is_active=user_data["is_active"]
+        ))
+    return users
+
 @app.post("/ask", response_class=Response)
-async def ask(payload: AskPayload):
+async def ask(payload: AskPayload, current_user: User = Depends(get_current_user)):
     """
-    Return manual JSON string (NOT auto-escaped).
+    Search endpoint with RBAC - Return manual JSON string (NOT auto-escaped).
     """
-    out = search(indices, payload.query, payload.roles, topk=payload.topk)
-    raw_json = json.dumps({"answer": out["answer"], "citations": out["results"]}, ensure_ascii=False)
+    # Get effective roles for the user
+    effective_roles = get_effective_roles(current_user.roles)
+    
+    # Perform search with user's roles
+    out = search(indices, payload.query, effective_roles, topk=payload.topk)
+    
+    # Filter results based on file access restrictions
+    filtered_results = filter_documents_by_access(current_user.roles, out["results"])
+    
+    # Update the answer if no results remain after filtering
+    if not filtered_results and out["results"]:
+        answer_html = "لم يتم العثور على نتائج متاحة بناءً على صلاحياتك الحالية."
+    else:
+        answer_html = out["answer"]
+    
+    raw_json = json.dumps({
+        "answer": answer_html, 
+        "citations": filtered_results,
+        "user_roles": current_user.roles,
+        "total_found": len(out["results"]),
+        "accessible_results": len(filtered_results)
+    }, ensure_ascii=False)
+    
     # ✅ return as plain response so <mark> isn't escaped
     return Response(content=raw_json, media_type="application/json")

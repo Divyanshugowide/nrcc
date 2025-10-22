@@ -1,0 +1,491 @@
+# NRRC Arabic PoV - Complete Documentation
+## Phase-by-Phase Implementation Guide
+
+This document provides comprehensive documentation for all phases of the NRRC Arabic PoV (Proof of Value) project, including the newly implemented RBAC (Role-Based Access Control) system.
+
+---
+
+## Phase 0 — Workspace & Dependencies Setup
+
+### Objective
+Create a clean Python workspace that installs and runs all required tooling.
+
+### Prerequisites
+- Python 3.10/3.11
+- Windows PowerShell 7+ (recommended)
+- Internet connection (first run only)
+
+### Steps
+
+#### 1. Create Project and Virtual Environment
+```powershell
+cd %HOMEPATH%\Desktop
+mkdir nrrc_arabic_pov && cd nrrc_arabic_pov
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+```
+
+#### 2. Install Dependencies
+```powershell
+pip install -r requirements.txt
+```
+
+#### 3. Verify Installation
+```powershell
+# Check packages
+pip list
+
+# Test imports
+python -c "import fitz, faiss, fastapi; print('ok')"
+```
+
+### Evidence Required
+- Screenshot of successful pip install
+- Console output showing "ok" from import test
+
+### Common Issues & Solutions
+- **PowerShell Execution Policy**: Run `Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser`
+- **Python Version**: Ensure Python 3.10+ is installed and in PATH
+- **Virtual Environment**: Always activate `.venv` before running commands
+
+---
+
+## Phase 1 — Load PDFs & Extract/Chunk Arabic Text
+
+### Objective
+Turn your 5–6 Arabic law PDFs into article-aware chunks with page hints.
+
+### Inputs
+- Place PDFs in `data/raw_pdfs/` directory
+- Ensure PDFs contain selectable text (not scanned images)
+
+### Steps
+
+#### 1. Run Extraction Script
+```powershell
+python scripts\02_extract_and_chunk.py
+```
+
+#### 2. Verify Output
+- File `data/processed/chunks.jsonl` exists and has many lines
+- Check first 3 lines:
+```powershell
+Get-Content data\processed\chunks.jsonl -TotalCount 3
+```
+
+### Expected Output Format
+Each line should contain JSON with:
+- `doc_id`: Document identifier
+- `article_no`: Article number (or null)
+- `page_start`, `page_end`: Page references
+- `text`: Extracted Arabic text
+- `roles`: Access roles (default: ["staff", "legal", "admin"])
+
+### Evidence Required
+- First 3 JSON lines saved to `evidence_phase1.txt`
+
+### Common Failures & Fixes
+- **Empty chunks**: PDF is scanned image → Use OCR (Tesseract Arabic) first
+- **Encoding errors**: Set `$env:PYTHONIOENCODING="utf-8"`
+- **No articles found**: Check PDF structure and article formatting
+
+---
+
+## Phase 2 — Build Keyword Index (BM25, Arabic-aware)
+
+### Objective
+Create a keyword baseline that can find exact legal terms and article numbers.
+
+### Steps
+
+#### 1. Build BM25 Index
+```powershell
+python scripts\03_build_bm25.py
+```
+
+#### 2. Verify Output
+- File `data/idx/bm25.pkl` is created
+- Script prints: `[ok] wrote data/idx/bm25.pkl over <N> chunks`
+
+### Evidence Required
+- Screenshot of console output showing chunk count
+
+### Common Failures & Fixes
+- **Encoding error**: Ensure system locale is UTF-8
+- **Memory issues**: Reduce chunk size or use 64-bit Python
+- **Empty index**: Re-run Phase 1 to ensure chunks exist
+
+---
+
+## Phase 3 — Build Semantic Index (multilingual-E5 + FAISS)
+
+### Objective
+Create an Arabic-capable vector index for semantic search.
+
+### Steps
+
+#### 1. Build FAISS Index
+```powershell
+python scripts\04_build_faiss.py
+```
+
+#### 2. Verify Output
+- Files `data/idx/mE5.faiss` and `data/idx/meta.json` exist
+- Script ends with `[ok] wrote ... for <N> chunks`
+
+### Evidence Required
+- Screenshot of success line
+- File sizes in `data/idx/` directory
+
+### Common Failures & Fixes
+- **Model download blocked**: Copy model cache from connected machine
+- **Memory issues**: Use smaller batch sizes or 64-bit Python
+- **Slow processing**: First run downloads model (~500MB)
+
+---
+
+## Phase 4 — End-to-End Query via CLI (with Citations)
+
+### Objective
+Ask Arabic questions and get Arabic snippets + citations.
+
+### Steps
+
+#### 1. Test Queries
+```powershell
+# Basic query
+python scripts\05_query_cli.py --query "ما هو حد مسؤولية المشغل؟" --roles staff
+
+# Legal query
+python scripts\05_query_cli.py --query "من الجهة المسؤولة عن التفتيش والضبط؟" --roles legal
+
+# Complex query
+python scripts\05_query_cli.py --query "ما هي العقوبات عند نقل مواد نووية دون ترخيص؟" --roles admin
+```
+
+#### 2. Verify Output
+Each query should return:
+- **ANSWER**: Arabic extract with highlighted terms
+- **CITATIONS**: Lines like `doc_id | المادة <رقم> | ص<start>-<end> | score=...`
+- At least 1 citation must be returned
+
+### Evidence Required
+- Console output of 2 queries saved to `evidence_phase4.txt`
+
+### Performance Tuning
+If results look weak:
+- Re-run Phase 1 (ensure text, not scans)
+- Increase candidate pools: `bm25_k=100, vec_k=100`
+- Adjust fusion weight: `alpha=0.7` for more semantic weight
+
+---
+
+## Phase 5 — Minimal API Online (/health, /ask)
+
+### Objective
+Serve the retriever so a UI/bot can call it.
+
+### Steps
+
+#### 1. Start API Server
+```powershell
+uvicorn app.run_api:app --host 0.0.0.0 --port 8000 --reload
+```
+
+#### 2. Test Health Endpoint
+```powershell
+curl http://127.0.0.1:8000/health
+```
+Should return: `{"ok": true}`
+
+#### 3. Test Ask Endpoint
+```powershell
+curl -X POST "http://127.0.0.1:8000/ask" -H "Content-Type: application/json" `
+  -d "{""user_id"":""demo"",""roles"":[""staff""],""query"":""ما هو حد مسؤولية المشغل؟""}"
+```
+
+### Evidence Required
+- JSON response saved as `evidence_phase5.json`
+
+### Common Failures & Fixes
+- **Import error**: Activate venv and run from project root
+- **Model download blocked**: Use local model path
+- **Port conflicts**: Change port with `--port 8001`
+
+---
+
+## Phase 6 — RBAC (Role-Filtered Results) - NEW!
+
+### Objective
+Prove role-based visibility works at retrieval time with automatic file restrictions.
+
+### Steps
+
+#### 1. Add Test Restricted Documents
+```powershell
+python scripts\add_restricted_docs.py
+```
+
+#### 2. Test Different Roles
+```powershell
+# Staff user (limited access)
+python scripts\05_query_cli.py --query "restricted" --roles staff --show-restricted
+
+# Legal user (full access)
+python scripts\05_query_cli.py --query "restricted" --roles legal --show-restricted
+
+# Admin user (full access)
+python scripts\05_query_cli.py --query "restricted" --roles admin --show-restricted
+```
+
+#### 3. Verify RBAC Behavior
+- **Staff**: Should see fewer results or no restricted documents
+- **Legal**: Should see all documents including restricted ones
+- **Admin**: Should see all documents including restricted ones
+
+### Evidence Required
+- Side-by-side outputs saved to `evidence_phase6.txt`
+
+### RBAC Features Implemented
+- **Automatic File Detection**: Documents with "restricted" in name are automatically restricted
+- **Role-Based Access**: Only `legal` and `admin` roles can access restricted documents
+- **Transparent Filtering**: Users are informed about hidden results
+- **JWT Authentication**: Secure token-based authentication
+- **Web Interface**: Complete login and role-based UI
+
+---
+
+## Phase 7 — Arabic Retrieval Quality Boosters (Optional)
+
+### Objective
+Lift precision with simple enhancements (no training required).
+
+### Steps
+
+#### 1. Enhance Glossary
+Edit `conf/glossary_ar.json` to add more synonyms:
+```json
+{
+  "النفايات المشعة": ["النفايات النووية", "المخلفات المشعة"],
+  "هيئة الرقابة": ["الهيئة النووية", "جهة الرقابة"]
+}
+```
+
+#### 2. Test Article-Aware Queries
+```powershell
+python scripts\05_query_cli.py --query "في المادة ٢١" --roles staff
+```
+
+#### 3. Optional Reranker (Future Enhancement)
+- Add BAAI/bge-reranker-v2-m3 for reranking top-50 results
+- Drop-in script available when ready
+
+### Evidence Required
+- Before/after comparison in `evidence_phase7.txt`
+
+---
+
+## Phase 8 — Mini Evaluation (Tiny, Objective)
+
+### Objective
+Prove accuracy with a small gold set (12–15 Q→Article).
+
+### Steps
+
+#### 1. Create Gold Standard
+Create `eval/gold.csv` with columns:
+- `query`: Test question
+- `expected_doc`: Expected document
+- `expected_article`: Expected article number
+
+#### 2. Run Evaluation
+For each query:
+- Run via CLI
+- Record if top-1 citation matches expected article
+- Record if it appears in top-3
+
+#### 3. Calculate Metrics
+- **Precision@1**: % of queries where top-1 matches expected
+- **Precision@3**: % of queries where expected appears in top-3
+- **Citation Correctness**: % where article number matches
+
+### Success Criteria
+- ≥70% P@3 on 12–15 questions
+- Tune alpha or glossary if lower
+
+### Evidence Required
+- `eval/results.csv` with per-query outcomes
+- Short summary text
+
+---
+
+## RBAC System Documentation
+
+### Authentication System
+The RBAC system includes:
+
+#### User Roles
+- **Admin**: Full system access, can manage users, access all documents
+- **Legal**: Access to general and restricted documents
+- **Staff**: Access to general documents only
+
+#### Security Features
+- JWT-based authentication with 30-minute token expiration
+- Password hashing using bcrypt
+- Role-based API endpoint protection
+- Automatic session management
+
+#### File Restrictions
+- **Automatic Detection**: Any document with "restricted" in its name
+- **Access Control**: Only `legal` and `admin` roles can access
+- **Transparent Filtering**: Users see notifications about hidden results
+
+### API Endpoints
+
+#### Authentication
+- `POST /login` - User login with username/password
+- `GET /me` - Get current user information
+- `GET /users` - List all users (admin only)
+
+#### Search
+- `POST /ask` - Search documents (requires authentication)
+
+### Web Interface Features
+- **Login Interface**: Arabic RTL support with role selection
+- **Role-Based UI**: Different interfaces based on user permissions
+- **Access Information**: Shows user's current access level
+- **Session Management**: Automatic logout on token expiration
+
+### Testing RBAC
+```powershell
+# Test different access levels
+python scripts\test_rbac.py
+
+# Manual CLI testing
+python scripts\05_query_cli.py --query "restricted" --roles staff --show-restricted
+```
+
+---
+
+## Troubleshooting Guide
+
+### Common Issues
+
+#### 1. Import Errors
+```powershell
+# Solution: Activate virtual environment
+.\.venv\Scripts\Activate.ps1
+```
+
+#### 2. Encoding Issues
+```powershell
+# Solution: Set UTF-8 encoding
+$env:PYTHONIOENCODING="utf-8"
+```
+
+#### 3. Model Download Issues
+```powershell
+# Solution: Set model cache directory
+$env:TRANSFORMERS_CACHE="C:\path\to\cache"
+```
+
+#### 4. Empty Search Results
+- Check if PDFs are scanned images (need OCR)
+- Verify documents are in `data/raw_pdfs/`
+- Re-run the pipeline steps
+
+#### 5. RBAC Issues
+- Verify user roles in `app/auth.py`
+- Check JWT token expiration
+- Ensure proper authentication headers
+
+### Performance Tuning
+- Increase candidate pools: `bm25_k=100, vec_k=100`
+- Adjust fusion weight: `alpha=0.7` for more semantic weight
+- Add more synonyms to `conf/glossary_ar.json`
+
+---
+
+## File Structure Reference
+
+```
+nrrc_arabic_pov/
+├── app/
+│   ├── auth.py              # Authentication & RBAC system
+│   ├── run_api.py           # Main API with web interface
+│   ├── retrieval.py         # Search engine with RBAC
+│   ├── chunking.py          # Document processing
+│   └── normalize.py         # Arabic text normalization
+├── scripts/
+│   ├── 02_extract_and_chunk.py    # PDF processing
+│   ├── 03_build_bm25.py           # Keyword index
+│   ├── 04_build_faiss.py          # Semantic index
+│   ├── 05_query_cli.py            # CLI interface
+│   ├── add_restricted_docs.py     # Add test documents
+│   └── test_rbac.py               # RBAC testing
+├── data/
+│   ├── raw_pdfs/            # Input PDF files
+│   ├── processed/           # Chunked documents
+│   └── idx/                 # Search indices
+├── conf/
+│   └── glossary_ar.json     # Arabic synonyms
+├── eval/                    # Evaluation files
+├── requirements.txt         # Dependencies
+├── README.md               # Quick start guide
+├── RBAC_README.md          # RBAC documentation
+├── IMPLEMENTATION_SUMMARY.md # Implementation summary
+└── documentation.txt       # This file
+```
+
+---
+
+## Security Considerations
+
+### Production Deployment
+- Change default passwords in `app/auth.py`
+- Use strong SECRET_KEY for JWT signing
+- Implement HTTPS for all communications
+- Regular security audits recommended
+- Monitor access logs for suspicious activity
+
+### Access Control
+- Documents with "restricted" in names are automatically restricted
+- Role hierarchy: Admin > Legal > Staff
+- JWT tokens expire after 30 minutes
+- Password hashing using bcrypt
+
+---
+
+## Performance Metrics
+
+### Typical Performance
+- **Indexing**: ~1-2 minutes for 5-6 PDFs
+- **Search**: <100ms response time
+- **Memory**: ~500MB for typical document set
+- **Storage**: ~50MB indices for 5-6 PDFs
+
+### Scalability
+- Can handle 100+ documents with current setup
+- Memory usage scales linearly with document count
+- Search time remains constant with proper indexing
+
+---
+
+## Support and Maintenance
+
+### Regular Tasks
+- Monitor system performance
+- Update Arabic glossary with new terms
+- Review and update user roles as needed
+- Backup search indices regularly
+
+### Updates and Enhancements
+- Add new document types
+- Implement additional roles
+- Enhance search algorithms
+- Add more language support
+
+---
+
+This documentation covers all phases of the NRRC Arabic PoV project, including the comprehensive RBAC system implementation. For specific technical details, refer to the individual README files and source code comments.

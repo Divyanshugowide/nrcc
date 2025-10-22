@@ -313,8 +313,9 @@ def search(indices: Indices, query: str, roles: list[str],
         idx = cand_ids[j]
         meta = indices.meta[idx]
 
-        # RBAC filter
-        if roles and not (set(roles) & set(meta.get("roles", []))):
+        # RBAC filter - check document-level access
+        doc_roles = meta.get("roles", [])
+        if roles and not (set(roles) & set(doc_roles)):
             continue
 
         snippet = meta["text"][:700].replace("\n", " ")
