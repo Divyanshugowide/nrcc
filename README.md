@@ -4,12 +4,32 @@
 
 A comprehensive offline Arabic document retrieval system with advanced RBAC (Role-Based Access Control) for nuclear regulatory documents. Features semantic search, keyword matching, and secure role-based document access.
 
-## 🚀 Quick Start
+
+
+
+
+# 🚀 Quick Start for Smart NRRC AI
+
+### Prerequisites
+- Python 3.11+
+- No Internet required after first setup
+- Windows 10/11 (PowerShell 7+)
+
+### Steps
+1. Clone or unzip project
+2. Open PowerShell → Run:
+   ```powershell
+   .\run_native.bat
+
 
 ### Prerequisites
 - Python 3.10/3.11
 - Windows PowerShell 7+ (recommended)
 - Internet connection (first run only)
+
+
+
+
 
 ### 1. Setup Environment
 ```powershell
