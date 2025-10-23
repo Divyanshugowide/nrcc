@@ -1,0 +1,16 @@
+query,expected_doc,expected_article,top1_doc_match,top3_doc_match,top1_article_match,top3_article_match,found_doc,found_article,num_results
+ما هو حد مسؤولية المشغل؟,Law of Civil Liability for Nuclear Damage,(الحادية,True,True,True,True,True,True,10
+ما هي المواد النووية؟,Law of Nuclear and Radiation Control,الأولى,False,True,False,False,True,False,10
+ما هو المرفق النووي؟,Law of Nuclear and Radiation Control,مشعة,False,True,True,True,True,True,10
+ما هي النفايات المشعة؟,Law of Nuclear and Radiation Control,الأولى,True,True,False,False,True,False,10
+ما هو التعرض الإشعاعي؟,Law of Nuclear and Radiation Control,مشعة,True,True,False,True,True,True,10
+ما هو الترخيص المطلوب؟,Law of Nuclear and Radiation Control,مشعة,True,True,True,True,True,True,10
+ما هي مسؤولية المشغل عن الأضرار النووية؟,Law of Civil Liability for Nuclear Damage,الأولى,True,True,False,False,True,False,10
+ما هو الحادث النووي؟,Law of Civil Liability for Nuclear Damage,الأولى,True,True,False,False,True,False,10
+ما هي المنشأة النووية؟,Law of Civil Liability for Nuclear Damage,الأولى,True,True,False,False,True,False,10
+ما هو الوقود النووي؟,Law of Civil Liability for Nuclear Damage,الأولى,False,True,False,False,True,False,10
+ما هي اتفاقية فيينا؟,Law of Civil Liability for Nuclear Damage,الأولى,False,True,False,False,True,False,10
+ما هو الضمان المالي المطلوب؟,Law of Civil Liability for Nuclear Damage,الأولى,True,True,False,False,True,False,10
+ما هي مدة التقادم للمطالبة بالتعويض؟,Law of Civil Liability for Nuclear Damage,الأولى,True,True,False,False,True,False,10
+ما هو دور الهيئة في الرقابة؟,Law of Nuclear and Radiation Control,الأولى,False,True,False,False,True,False,10
+ما هي المواد المشعة؟,Law of Nuclear and Radiation Control,مشعة,True,True,False,False,True,False,10

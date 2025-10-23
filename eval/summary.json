@@ -1,0 +1,12 @@
+{
+  "metrics": {
+    "precision_at_1_doc": 0.6666666666666666,
+    "precision_at_3_doc": 1.0,
+    "precision_at_1_article": 0.2,
+    "precision_at_3_article": 0.26666666666666666,
+    "citation_correctness": 0.26666666666666666,
+    "total_queries": 15
+  },
+  "success_criteria_met": false,
+  "evaluation_date": "1761197123.1973834"
+}

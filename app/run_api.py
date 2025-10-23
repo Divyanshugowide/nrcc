@@ -43,6 +43,14 @@ def load_all():
     print("[OK] System ready")
 
 
+@app.get("/health")
+def health_check():
+    """Health check endpoint for Docker"""
+    if indices is None:
+        return {"status": "loading", "message": "System is still loading"}
+    return {"status": "healthy", "message": "System is ready"}
+
+
 @app.get("/", response_class=HTMLResponse)
 def home():
     return HTMLResponse("""

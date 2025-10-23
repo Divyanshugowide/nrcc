@@ -1,0 +1,14 @@
+{
+  "arabert_usage": {
+    "description": "How to use AraBERT integration",
+    "code": "\n# Load AraBERT model\nfrom app.arabert_integration import AraBERTIntegration\narabert = AraBERTIntegration()\narabert.load_model()\n\n# Create AraBERT index\nfrom app.arabert_integration import prepare_arabert_index\nprepare_arabert_index()\n\n# Use in hybrid search\nfrom app.arabert_integration import HybridSearchWithAraBERT\n# (Requires existing mE5 and BM25 indices)\n"
+  },
+  "reranker_usage": {
+    "description": "How to use multilingual reranker",
+    "code": "\n# Load reranker\nfrom app.reranker import MultilingualReranker\nreranker = MultilingualReranker()\nreranker.load_model()\n\n# Rerank results\nreranked = reranker.rerank(query, documents, top_k=10)\n\n# Advanced reranking\nfrom app.reranker import AdvancedReranker\nadvanced = AdvancedReranker()\nadvanced.load_model()\nreranked = advanced.rerank_with_weights(query, documents, top_k=10)\n"
+  },
+  "dataset_usage": {
+    "description": "How to use fine-tuning dataset",
+    "code": "\n# Generate dataset\npython scripts/prepare_finetuning_dataset.py\n\n# Load dataset\nimport json\nwith open('data/finetuning_dataset.json', 'r', encoding='utf-8') as f:\n    dataset = json.load(f)\n\n# Use for fine-tuning\n# (Implementation depends on chosen fine-tuning framework)\n"
+  }
+}

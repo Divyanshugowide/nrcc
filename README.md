@@ -60,6 +60,80 @@ Open `http://localhost:8000` and login with:
 - **Legal**: `legal` / `legal123` (Legal + Restricted access)  
 - **Staff**: `staff` / `staff123` (General access only)
 
+## 📋 Complete Phase-by-Phase Implementation
+
+### Phase 1: Data Preparation
+```powershell
+# Extract and chunk PDF documents
+python scripts\02_extract_and_chunk.py
+```
+**Evidence**: `evidence_phase1.txt`
+
+### Phase 2: Keyword Indexing (BM25)
+```powershell
+# Build BM25 keyword search index
+python scripts\03_build_bm25.py
+```
+**Evidence**: `evidence_phase2.txt`
+
+### Phase 3: Semantic Indexing (FAISS)
+```powershell
+# Build FAISS semantic search index
+python scripts\04_build_faiss.py
+```
+**Evidence**: `evidence_phase3.txt`
+
+### Phase 4: Hybrid Search Implementation
+```powershell
+# Test hybrid search functionality
+python scripts\05_query_cli.py --query "test query" --roles admin
+```
+**Evidence**: `evidence_phase4.txt`
+
+### Phase 5: RBAC System Implementation
+```powershell
+# Test RBAC with different roles
+python scripts\test_rbac.py
+```
+**Evidence**: `evidence_phase5.txt`
+
+### Phase 6: Web Interface Development
+```powershell
+# Start web interface
+uvicorn app.run_api:app --host 0.0.0.0 --port 8000 --reload
+```
+**Evidence**: `evidence_phase6.txt`
+
+### Phase 7: Testing and Validation
+```powershell
+# Run comprehensive tests
+python scripts\test_rbac.py
+python scripts\05_query_cli.py --query "test" --roles admin
+```
+**Evidence**: `evidence_phase7.txt`
+
+### Phase 8: Evaluation Framework
+```powershell
+# Run evaluation on gold standard dataset
+$env:PYTHONIOENCODING="utf-8"; python eval\evaluate.py
+```
+**Evidence**: `evidence_phase8.txt`
+
+### Phase 9: Handover Pack
+```powershell
+# Package system for distribution
+# (See Docker section below)
+```
+**Evidence**: This README and evidence files
+
+### Phase 10: Next Sprint Hooks
+```powershell
+# Advanced features (optional)
+# - AraBERT-v3 integration
+# - Multilingual reranker
+# - Fine-tuning dataset preparation
+```
+
 ## 🔐 RBAC System Features
 
 ### Role Hierarchy
@@ -213,6 +287,60 @@ python scripts\test_rbac.py
 - **Memory**: ~500MB for typical document set
 - **Storage**: ~50MB indices for 5-6 PDFs
 
+## 🐳 Docker Deployment
+
+### Quick Start with Docker
+```bash
+# Clone repository
+git clone <repository-url>
+cd nrrc_arabic_pov_windows
+
+# Add your PDFs to data/raw_pdfs/
+# Then build and run
+docker-compose up -d
+
+# Access at http://localhost:8000
+```
+
+### Docker Commands
+```bash
+# Build image
+docker build -t nrrc-arabic-pov .
+
+# Run container
+docker run -d -p 8000:8000 -v $(pwd)/data:/app/data nrrc-arabic-pov
+
+# Check health
+curl http://localhost:8000/health
+```
+
+For detailed Docker deployment instructions, see [DEPLOYMENT.md](DEPLOYMENT.md).
+
+## 📦 Package Contents
+
+### Core Files
+- `app/` - Main application code
+- `scripts/` - Processing and utility scripts
+- `data/` - Document indices and processed data
+- `conf/` - Configuration files
+- `eval/` - Evaluation framework
+
+### Evidence Files
+- `evidence_phase1.txt` - Data preparation evidence
+- `evidence_phase2.txt` - BM25 indexing evidence
+- `evidence_phase3.txt` - FAISS indexing evidence
+- `evidence_phase4.txt` - Hybrid search evidence
+- `evidence_phase5.txt` - RBAC system evidence
+- `evidence_phase6.txt` - Web interface evidence
+- `evidence_phase7.txt` - Testing evidence
+- `evidence_phase8.txt` - Evaluation evidence
+
+### Docker Files
+- `Dockerfile` - Container definition
+- `docker-compose.yml` - Multi-container setup
+- `.dockerignore` - Docker ignore patterns
+- `DEPLOYMENT.md` - Deployment guide
+
 ## 🤝 Support
 
 For issues or questions:
@@ -220,9 +348,11 @@ For issues or questions:
 2. Review the documentation files
 3. Test with different user roles
 4. Verify file permissions and access
+5. Check Docker logs: `docker logs nrrc-arabic-pov`
 
 ---
 
 **Built with**: FastAPI, FAISS, BM25, Sentence-Transformers, PyMuPDF
 **Language**: Arabic (RTL) with English support
 **Security**: JWT Authentication + Role-Based Access Control
+**Deployment**: Docker + Docker Compose ready

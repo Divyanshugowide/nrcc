@@ -1,0 +1,18 @@
+[wsl2]
+# Memory allocation for WSL2
+memory=4GB
+
+# Number of processors to use
+processors=2
+
+# Swap memory
+swap=2GB
+
+# Enable localhost forwarding
+localhostForwarding=true
+
+# Enable nested virtualization (for Docker)
+nestedVirtualization=true
+
+# Enable experimental features
+experimental=true
